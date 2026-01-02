@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "neo-clm"
+version = "4.57.3"
+description = "Opinionated HF causal LM pretraining"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "Chua Vui Seng" }]
+
+dependencies = [
+  "typer>=0.12",
+  "torch",
+  "transformers==4.57.3",
+  "datasets",
+  "accelerate",
+  "scikit-learn",
+  "evaluate",
+  "tabulate",
+  "humanize",
+  "wandb"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "ruff",
+]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
