@@ -465,6 +465,18 @@ def main():
             config.update_from_string(model_args.config_overrides)
             logger.info(f"New config: {config}")
 
+    # --- NOTE: Make model honor block_size ----------------------------------
+    if not hasattr(config, "max_position_embeddings"):
+        raise ValueError(
+            "Model config has no `max_position_embeddings`. "
+            "Cannot determine maximum context length."
+            ""
+        )
+
+    if data_args.block_size:
+        if data_args.block_size != config.max_position_embeddings:
+            config.max_position_embeddings = data_args.block_size
+       
     tokenizer_kwargs = {
         "cache_dir": model_args.cache_dir,
         "use_fast": model_args.use_fast_tokenizer,
@@ -499,14 +511,28 @@ def main():
         n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
         logger.info(f"Training new model from scratch - Total size={n_params / 2**20:.2f}M params")
 
-    # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
-    # on a small vocab and want a smaller embedding size, remove this test.
-    embedding_size = model.get_input_embeddings().weight.shape[0]
-    if len(tokenizer) > embedding_size:
-        model.resize_token_embeddings(len(tokenizer))
+    # --- NOTE:Vocab Alignment between Tokenizer and Model --------------------------
+    assert tokenizer.eos_token is not None, "Tokenizer must define eos_token"
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+        # DO NOT DO the following, this creates new id for same token value. 
+        # tokenizer.add_special_tokens({'pad_token': tokenizer.eos_token})
+
+    tokzr_nvocab = len(tokenizer)
+    model_nvocab = model.get_input_embeddings().weight.shape[0]
+    if tokzr_nvocab != model_nvocab:
+        model.resize_token_embeddings(tokzr_nvocab)
+
+    # align regardless
+    model.config.eos_token_id = tokenizer.eos_token_id
+    model.config.pad_token_id = tokenizer.pad_token_id
+    # --- End of Vocab Alignment ---------------------------------------
 
     # Preprocessing the datasets.
     # First we tokenize all the texts.
+    # NOTE: tokenizer.model_max_length is not adjusted yet, just so
+    # tokenization is rather fixed size for more of the time.
+    # we adjust below.
     if training_args.do_train:
         column_names = list(raw_datasets["train"].features)
     else:
@@ -543,30 +569,20 @@ def main():
                 batched=True,
                 remove_columns=column_names,
             )
-    if hasattr(config, "max_position_embeddings"):
-        max_pos_embeddings = config.max_position_embeddings
-    else:
-        # Define a default value if the attribute is missing in the config.
-        max_pos_embeddings = 1024
+    
+    # NOTE: At this point
+    # model.config.max_position_embeddings is aligned to block size regardless and if set.
+    # tokenizer.model_max_length is still OOTB.
+    # we align tokenizer.model_max_length to model.config.max_position_embeddings here.
+    # block_size is used for chunking below. it must be data_args.block_size if set
+    # else must be model.config.max_position_embeddings.
+    if tokenizer.model_max_length != model.config.max_position_embeddings:
+        tokenizer.model_max_length = model.config.max_position_embeddings
 
-    if data_args.block_size is None:
-        block_size = tokenizer.model_max_length
-        if block_size > max_pos_embeddings:
-            logger.warning(
-                f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
-                f"Using block_size={min(1024, max_pos_embeddings)} instead. You can change that default value by passing --block_size xxx."
-            )
-            if max_pos_embeddings > 0:
-                block_size = min(1024, max_pos_embeddings)
-            else:
-                block_size = 1024
+    if data_args.block_size:
+        block_size = data_args.block_size
     else:
-        if data_args.block_size > tokenizer.model_max_length:
-            logger.warning(
-                f"The block_size passed ({data_args.block_size}) is larger than the maximum length for the model "
-                f"({tokenizer.model_max_length}). Using block_size={tokenizer.model_max_length}."
-            )
-        block_size = min(data_args.block_size, tokenizer.model_max_length)
+        block_size = model.config.max_position_embeddings
 
     # Main data processing function that will concatenate all texts from our dataset and generate chunks of block_size.
     def group_texts(examples):
