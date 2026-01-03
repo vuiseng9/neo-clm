@@ -63,9 +63,9 @@ from transformers.testing_utils import CaptureLogger
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
-from neoclm.utils import LogParamsCallback
+from kit.utils import LogParamsCallback
 import humanize
-from args import ModelArgs, DataArgs, OpinionatedTrainArgs
+from kit.args import ModelArgs, DataArgs, OpinionatedTrainArgs
 # , OpinionatedTrainArgs
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.

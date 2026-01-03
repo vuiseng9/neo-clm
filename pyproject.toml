@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "neo-clm"
 version = "4.57.3"
 description = "Opinionated HF causal LM pretraining"
-readme = "README.md"
+readme = "readme.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
 authors = [{ name = "Chua Vui Seng" }]
@@ -25,16 +25,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = [
-  "pytest",
-  "ruff",
-]
-
-[tool.setuptools]
-package-dir = { "" = "src" }
+dev = ["pytest", "ruff"]
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
+include = ["kit*"]  # discovers kit
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
