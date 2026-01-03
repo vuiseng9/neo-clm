@@ -1,14 +1,16 @@
+import os
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, Union
 
-from transformers import MODEL_FOR_CAUSAL_LM_MAPPING
+from transformers import MODEL_FOR_CAUSAL_LM_MAPPING, TrainingArguments
+from transformers.trainer_utils import SchedulerType, IntervalStrategy
 from transformers.utils.versions import require_version
 
 MODEL_CONFIG_CLASSES = list(MODEL_FOR_CAUSAL_LM_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 @dataclass
-class ModelArguments:
+class ModelArgs:
     """
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune, or train from scratch.
     """
@@ -90,7 +92,7 @@ class ModelArguments:
 
 
 @dataclass
-class DataTrainingArguments:
+class DataArgs:
     """
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
@@ -146,7 +148,12 @@ class DataTrainingArguments:
     )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
-        metadata={"help": "The number of processes to use for the preprocessing."},
+        metadata={
+            "help": (
+                "The number of processes to use for the preprocessing. "
+                "If None (default), automatically set to 0.75 of CPU cores divided by world size for world-size aware parallelism."
+            )
+        },
     )
     keep_linebreaks: bool = field(
         default=True, metadata={"help": "Whether to keep line breaks when using TXT files or not."}
@@ -165,3 +172,104 @@ class DataTrainingArguments:
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
                 assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
+        
+        # Auto-set preprocessing_num_workers if not provided
+        if self.preprocessing_num_workers is None:
+            world_size = int(os.environ.get("WORLD_SIZE", 1))
+            cpu_count = os.cpu_count() or 1
+            self.preprocessing_num_workers = int(max(1, cpu_count * 0.75 / world_size))
+
+
+@dataclass
+class OpinionatedTrainArgs(TrainingArguments):
+    seed: int = field(default=1228, metadata={"help": "Random seed that will be set at the beginning of training."})
+    data_seed: Optional[int] = field(default=1001, metadata={"help": "Random seed to be used with data samplers."})
+
+    lr_scheduler_type: Union[SchedulerType, str] = field(
+        default="cosine",
+        metadata={"help": "The scheduler type to use."},
+    )
+
+    warmup_ratio: float = field(
+        default=0.01, metadata={"help": "Linear warmup over warmup_ratio fraction of total steps."}
+    )
+
+    bf16: bool = field(
+        default=True,
+        metadata={
+            "help": (
+                "Whether to use bf16 (mixed) precision instead of 32-bit. Requires Ampere or higher NVIDIA"
+                " architecture or using CPU (use_cpu) or Ascend NPU. This is an experimental API and it may change."
+            )
+        },
+    )
+
+    torch_compile: bool = field(
+        default=True, metadata={"help": "If set to `True`, the model will be wrapped in `torch.compile`."}
+    )
+
+    eval_strategy: Union[IntervalStrategy, str] = field(
+        default="steps",
+        metadata={"help": "The evaluation strategy to use."},
+    )
+
+    eval_steps: Optional[float] = field(
+        default=0.05,
+        metadata={
+            "help": (
+                "Run an evaluation every X steps. Should be an integer or a float in range `[0,1)`. "
+                "If smaller than 1, will be interpreted as ratio of total training steps."
+            )
+        },
+    )
+
+    report_to: Union[None, str, list[str]] = field(
+        default="wandb", metadata={"help": "The list of integrations to report the results and logs to."}
+    )
+
+    logging_steps: float = field(
+        default=1,
+        metadata={
+            "help": (
+                "Log every X update steps. If X >= 1, treated as an absolute number of steps. "
+                "If 0 <= X < 1, treated as a ratio of total training steps."
+            )
+        },
+    )
+
+    save_total_limit: Optional[int] = field(
+        default=2,
+        metadata={
+            "help": (
+                "If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in"
+                " `output_dir`. When `load_best_model_at_end` is enabled, the 'best' checkpoint according to"
+                " `metric_for_best_model` will always be retained in addition to the most recent ones. For example,"
+                " for `save_total_limit=5` and `load_best_model_at_end=True`, the four last checkpoints will always be"
+                " retained alongside the best model. When `save_total_limit=1` and `load_best_model_at_end=True`,"
+                " it is possible that two checkpoints are saved: the last one and the best one (if they are different)."
+                " Default is unlimited checkpoints"
+            )
+        },
+    )
+
+    # because we do causal LM training, these can be preset
+    metric_for_best_model: Optional[str] = field(
+        default="eval_loss", metadata={"help": "The metric to use to compare two different models."}
+    )
+
+    greater_is_better: Optional[bool] = field(
+        default=False, metadata={"help": "Whether the `metric_for_best_model` should be maximized or not."}
+    )
+
+    overwrite_output_dir: bool = field(
+        default=True,
+        metadata={
+            "help": (
+                "Overwrite the content of the output directory. "
+                "Use this to continue training if output_dir points to a checkpoint directory."
+            )
+        },
+    )
+
+    def __post_init__(self):
+        super().__post_init__()

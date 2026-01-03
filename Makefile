@@ -4,7 +4,6 @@ WANDB_PROJECT ?= neo-clm
 OUTROOT ?= /root/work/run
 CUDADEV ?= 0
 DATAROOT ?= /root/work/dataset
-SEED ?= 1228
 
 check-postfix:
 ifeq ($(postfix),)
@@ -16,22 +15,25 @@ ifeq ($(runlabel),)
 	$(error runlabel must be provided. Usage: make <target> runlabel=something)
 endif
 
-gpt2-tinystories: check-postfix
+# Notes on default: 
+# adamw_torch_fused, cosine scheduler, warmup_ratio=0.01, 
+# save_total_limit=2, by best eval_loss
+# seed and data_seed set by default
+
+gpt2-tinystories-new: check-postfix
 	mkdir -p $(OUTROOT)/$(WANDB_PROJECT)/$@-$(postfix) && \
 	WANDB_PROJECT=$(WANDB_PROJECT) \
 	CUDA_VISIBLE_DEVICES=$(CUDADEV) python run_clm.py \
 		--model_type gpt2 --config_overrides n_embd=256,n_layer=8,n_head=16 \
-		--tokenizer_name openai-community/gpt2 --use_fast_tokenizer \
+		--tokenizer_name openai-community/gpt2 \
 		--dataset_name roneneldan/TinyStories --block_size 512 \
-		--preprocessing_num_workers 16 \
-		--optim adamw_torch_fused --learning_rate 1e-3 --lr_scheduler_type cosine --warmup_ratio 0.01 --num_train_epochs 2 \
-		--do_train --do_eval --bf16 --torch_compile \
+		--learning_rate 1e-3 --num_train_epochs 2 \
+		--do_train --do_eval \
 		--per_device_train_batch_size 256 --per_device_eval_batch_size 256 \
-		--eval_strategy steps --eval_steps 200 \
-		--logging_steps 1 --report_to wandb --run_name $@-$(postfix) \
-		--save_strategy steps --save_steps 1000 --save_total_limit 2 \
-		--metric_for_best_model eval_loss --greater_is_better false \
-		--overwrite_output_dir --output_dir $(OUTROOT)/$(WANDB_PROJECT)/$@-$(postfix)
+		--eval_steps 200 \
+		--save_steps 1000 \
+		--run_name $@-$(postfix) \
+		--output_dir $(OUTROOT)/$(WANDB_PROJECT)/$@-$(postfix)
 
 
 
