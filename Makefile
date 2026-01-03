@@ -35,7 +35,19 @@ gpt2-tinystories-new: check-postfix
 		--run_name $@-$(postfix) \
 		--output_dir $(OUTROOT)/$(WANDB_PROJECT)/$@-$(postfix)
 
-
+gpt2-tinystories-sweep-lr: check-postfix
+	mkdir -p $(OUTROOT)/$(WANDB_PROJECT)/$@-$(postfix) && \
+	WANDB_PROJECT=$(WANDB_PROJECT) \
+	CUDA_VISIBLE_DEVICES=$(CUDADEV) python run_clm.py \
+		--model_type gpt2 --config_overrides n_embd=256,n_layer=8,n_head=16 \
+		--tokenizer_name openai-community/gpt2 \
+		--dataset_name roneneldan/TinyStories --block_size 512 \
+		--per_device_train_batch_size 256 \
+		--sweep_lr 5e-3,5e-4,1e-3,1e-3,8e-4,3e-4,3e-3 \
+		--sweep_lr_steps 250 \
+		--warmup_steps 30 \
+		--run_name $@-$(postfix) \
+		--output_dir $(OUTROOT)/$(WANDB_PROJECT)/$@-$(postfix)
 
 
 llama-dense: check-postfix

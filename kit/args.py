@@ -271,5 +271,31 @@ class OpinionatedTrainArgs(TrainingArguments):
         },
     )
 
+    sweep_lr: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Learning rate sweep mode. Provide comma-separated learning rates to test. "
+                "Each LR will be trained for sweep_lr_steps steps. Example: --sweep_lr 1e-5,3e-5,1e-4,3e-4,1e-3"
+            )
+        },
+    )
+
+    sweep_lr_steps: int = field(
+        default=100,
+        metadata={
+            "help": "Number of training steps to run for each learning rate when using --sweep_lr."
+        },
+    )
+
     def __post_init__(self):
         super().__post_init__()
+        
+        # Parse comma-separated sweep_lr string into list of floats
+        if self.sweep_lr is not None:
+            try:
+                self.sweep_lr = sorted(set([float(lr.strip()) for lr in self.sweep_lr.split(',')]))
+            except ValueError as e:
+                raise ValueError(
+                    f"Invalid --sweep_lr format. Expected comma-separated floats, got: {self.sweep_lr}"
+                ) from e
