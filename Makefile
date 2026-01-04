@@ -12,7 +12,7 @@ ifeq ($(postfix),)
 endif
 
 eval-tinystories:
-	python kit/evals/ts/tinystories_qualitative.py $(ckpt)
+	CUDA_VISIBLE_DEVICES=$(CUDADEV) python kit/evals/ts/tinystories_qualitative.py $(ckpt)
 
 gpt2-ts-sweep-lr: check-postfix
 	mkdir -p $(OUTROOT)/$(WANDB_PROJECT)/$@-$(postfix) && \
@@ -40,7 +40,7 @@ gpt2-ts: check-postfix
 		--model_type gpt2 --config_overrides n_embd=256,n_layer=8,n_head=16 \
 		--tokenizer_name openai-community/gpt2 \
 		--dataset_name roneneldan/TinyStories --block_size 512 \
-		--learning_rate 1e-3 --num_train_epochs 2 \
+		--learning_rate 8e-4 --num_train_epochs 2 \
 		--do_train --do_eval \
 		--per_device_train_batch_size 256 --per_device_eval_batch_size 256 \
 		--eval_steps 200 \
@@ -71,6 +71,35 @@ gptneo-ts: check-postfix
 		--tokenizer_name EleutherAI/gpt-neo-125m \
 		--dataset_name roneneldan/TinyStories --block_size 512 \
 		--learning_rate 3e-4 --num_train_epochs 2 \
+		--do_train --do_eval \
+		--per_device_train_batch_size 128 --per_device_eval_batch_size 128 \
+		--eval_steps 500 \
+		--save_steps 2000 \
+		--run_name $@-$(postfix) \
+		--output_dir $(OUTROOT)/$(WANDB_PROJECT)/$@-$(postfix)
+
+gptneo-ts-v10k-sweep-lr: check-postfix
+	mkdir -p $(OUTROOT)/$(WANDB_PROJECT)/$@-$(postfix) && \
+	WANDB_PROJECT=$(WANDB_PROJECT) \
+	CUDA_VISIBLE_DEVICES=$(CUDADEV) python run_clm.py \
+		--model_type gpt_neo --config_overrides hidden_size=768,num_layers=4,num_heads=16,window_size=256 \
+		--tokenizer_name vuiseng9/bpe-10.0k-tinystories \
+		--dataset_name roneneldan/TinyStories --block_size 512 \
+		--per_device_train_batch_size 128 \
+		--sweep_lr 1e-3,3e-3,5e-3,8e-3,1e-4,3e-4,5e-4,8e-4,1e-5,3e-5,5e-5,8e-5 \
+		--sweep_lr_steps 150 \
+		--warmup_steps 30 \
+		--run_name $@-$(postfix) \
+		--output_dir $(OUTROOT)/$(WANDB_PROJECT)/$@-$(postfix)
+
+gptneo-ts-v10k: check-postfix
+	mkdir -p $(OUTROOT)/$(WANDB_PROJECT)/$@-$(postfix) && \
+	WANDB_PROJECT=$(WANDB_PROJECT) \
+	CUDA_VISIBLE_DEVICES=$(CUDADEV) python run_clm.py \
+		--model_type gpt_neo --config_overrides hidden_size=768,num_layers=4,num_heads=16,window_size=256 \
+		--tokenizer_name vuiseng9/bpe-10.0k-tinystories \
+		--dataset_name roneneldan/TinyStories --block_size 512 \
+		--learning_rate 5e-4 --num_train_epochs 2 \
 		--do_train --do_eval \
 		--per_device_train_batch_size 128 --per_device_eval_batch_size 128 \
 		--eval_steps 500 \
