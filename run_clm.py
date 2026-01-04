@@ -450,9 +450,6 @@ def clm(model_args=None, data_args=None, training_args=None):
         )
     else:
         model = AutoModelForCausalLM.from_config(config, trust_remote_code=model_args.trust_remote_code)
-        n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
-        logger.info(f"Training new model from scratch - Total size={n_params / 2**20:.2f}M params")
-        model.config.n_params = humanize.metric(n_params).replace(" ", "")
 
     # --- NOTE:Vocab Alignment between Tokenizer and Model --------------------------
     assert tokenizer.eos_token is not None, "Tokenizer must define eos_token"
@@ -603,6 +600,11 @@ def clm(model_args=None, data_args=None, training_args=None):
             labels = labels[:, 1:].reshape(-1)
             preds = preds[:, :-1].reshape(-1)
             return metric.compute(predictions=preds, references=labels)
+
+    # Log the number of parameters (best done right before training because there is model resizing logic apriori)
+    n_params = sum({p.data_ptr(): p.numel() for p in model.parameters()}.values())
+    logger.info(f"Training new model from scratch - Total size={n_params / 2**20:.2f}M params")
+    model.config.n_params = humanize.metric(n_params).replace(" ", "")
 
     # Initialize our Trainer
     trainer = Trainer(
