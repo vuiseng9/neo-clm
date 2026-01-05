@@ -107,11 +107,11 @@ def main():
     transformers.utils.logging.enable_explicit_format()
 
     if training_args.sweep_lr:
-        sweep_lr(model_args, data_args, training_args)
+        clm_sweep_lr(model_args, data_args, training_args)
     else:
         clm(model_args, data_args, training_args)
 
-def sweep_lr(model_args, data_args, training_args):        
+def clm_sweep_lr(model_args, data_args, training_args, trainer_cls=Trainer):        
     import copy
     import json
     import pandas as pd
@@ -198,7 +198,7 @@ def sweep_lr(model_args, data_args, training_args):
         lr_training_args.run_name = f"{training_args.run_name}_lr_{each_lr:.1e}"
                     
         # Run training for this LR
-        clm(model_args, data_args, lr_training_args)
+        clm(model_args, data_args, lr_training_args, trainer_cls)
         
         # Properly close wandb run before next iteration
         # otherwise metrics get mixed up
@@ -264,7 +264,7 @@ def sweep_lr(model_args, data_args, training_args):
     return  # Exit after LR sweep
 
 
-def clm(model_args=None, data_args=None, training_args=None):
+def clm(model_args=None, data_args=None, training_args=None, trainer_cls=Trainer):
     if model_args is None and data_args is None and training_args is None:
         raise ValueError("model_args, data_args, training_args must be provided when calling clm()")
     
@@ -623,7 +623,7 @@ def clm(model_args=None, data_args=None, training_args=None):
     model.config.n_params = humanize.metric(n_params).replace(" ", "")
 
     # Initialize our Trainer
-    trainer = Trainer(
+    trainer = trainer_cls(
         model=model,
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,
