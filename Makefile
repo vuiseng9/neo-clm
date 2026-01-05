@@ -11,6 +11,9 @@ ifeq ($(postfix),)
 	$(error postfix must be provided. Usage: make <target> postfix=something)
 endif
 
+install-dev:
+	pip install -e .
+
 eval-tinystories:
 	CUDA_VISIBLE_DEVICES=$(CUDADEV) python kit/evals/ts/tinystories_qualitative.py $(ckpt)
 
