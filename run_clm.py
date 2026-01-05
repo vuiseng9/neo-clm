@@ -106,146 +106,162 @@ def main():
     transformers.utils.logging.enable_default_handler()
     transformers.utils.logging.enable_explicit_format()
 
-    if training_args.sweep_lr is None:
-        
+    if training_args.sweep_lr:
+        sweep_lr(model_args, data_args, training_args)
+    else:
         clm(model_args, data_args, training_args)
 
+def sweep_lr(model_args, data_args, training_args):        
+    import copy
+    import json
+    import pandas as pd
+    
+    logger.info(f"-" * 80)
+    logger.info(f"LR SWEEP MODE: Testing {len(training_args.sweep_lr)} learning rates")
+    logger.info(f"Each LR will run for {training_args.sweep_lr_steps} steps")
+    logger.info(f"Learning rates to test: {training_args.sweep_lr}")
+    logger.info(f"-" * 80)
+    
+    SWEEP_LR_WARMUP_STEPS = 20
+
+    # keep base copy once before the loop
+    base_training_args = copy.deepcopy(training_args)
+    base_output_dir = training_args.output_dir
+    
+    # Notify user about overrides for sweep
+    overrides = []
+        
+    if training_args.do_train is False:
+        overrides.append("do_train: False -> True (training enabled during sweep)")
+        training_args.do_train = True
+
+    if training_args.max_steps and training_args.max_steps != training_args.sweep_lr_steps:
+        overrides.append(f"max_steps: {training_args.max_steps} -> {training_args.sweep_lr_steps}")
+        training_args.max_steps = training_args.sweep_lr_steps
+
+    if training_args.do_eval:
+        overrides.append(f"do_eval: True -> False (evaluation disabled during sweep)")
+        training_args.do_eval = False 
+
+    if training_args.do_predict:
+        overrides.append(f"do_predict: True -> False (prediction disabled during sweep)")
+        training_args.do_predict = False
+
+    if training_args.save_strategy != "no":
+        overrides.append(f"save_strategy: {training_args.save_strategy} -> no")
+        training_args.save_strategy = "no"  # Don't save checkpoints during LR sweep
+
+    if training_args.eval_strategy != "no":
+        overrides.append(f"eval_strategy: {training_args.eval_strategy} -> no")
+        training_args.eval_strategy = "no"  # Don't eval during LR sweep
+
+    if training_args.learning_rate:
+        overrides.append(f"learning_rate: will be set by sweep (user value {training_args.learning_rate} ignored)")
+
+    if training_args.warmup_ratio != 0.0:
+        overrides.append(f"warmup_ratio: {training_args.warmup_ratio} -> 0.0")
+        training_args.warmup_ratio = 0.0
+    
+    if training_args.warmup_steps == 0:
+        overrides.append(f"warmup_steps is not set, forcing: {training_args.warmup_steps} -> {SWEEP_LR_WARMUP_STEPS}")
+        training_args.warmup_steps = SWEEP_LR_WARMUP_STEPS
+
+    if training_args.sweep_lr_steps < SWEEP_LR_WARMUP_STEPS:
+        overrides.append(f"sweep_lr_steps: {training_args.sweep_lr_steps} < {SWEEP_LR_WARMUP_STEPS}, adjusting warmup_steps to 0")
+        training_args.warmup_steps = 0
+
+    if training_args.warmup_steps > 0:
+        overrides.append(f"lr_scheduler_type: {training_args.lr_scheduler_type} -> {SchedulerType.CONSTANT_WITH_WARMUP}")
+        training_args.lr_scheduler_type = SchedulerType.CONSTANT_WITH_WARMUP
     else:
-        import copy
-        import json
-        
+        overrides.append(f"lr_scheduler_type: {training_args.lr_scheduler_type} -> {SchedulerType.CONSTANT}")
+        training_args.lr_scheduler_type = SchedulerType.CONSTANT
+
+    if overrides:
+        logger.info("The following arguments will be overridden for sweep:")
+        for override in overrides:
+            logger.info(f"  - {override}")
         logger.info(f"-" * 80)
-        logger.info(f"LR SWEEP MODE: Testing {len(training_args.sweep_lr)} learning rates")
-        logger.info(f"Each LR will run for {training_args.sweep_lr_steps} steps")
-        logger.info(f"Learning rates to test: {training_args.sweep_lr}")
-        logger.info(f"-" * 80)
+
+    results = []
+    
+    for idx, each_lr in enumerate(training_args.sweep_lr, 1):
+        logger.info(f"{'-'*80}")
+        logger.info(f"[{idx}/{len(training_args.sweep_lr)}] Testing LR = {each_lr}")
+        logger.info(f"{'-'*80}")
         
-        SWEEP_LR_WARMUP_STEPS = 20
-
-        # keep base copy once before the loop
-        base_training_args = copy.deepcopy(training_args)
-        base_output_dir = training_args.output_dir
-        
-        # Notify user about overrides for sweep
-        overrides = []
-         
-        if training_args.do_train is False:
-            overrides.append("do_train: False -> True (training enabled during sweep)")
-            training_args.do_train = True
-
-        if training_args.max_steps and training_args.max_steps != training_args.sweep_lr_steps:
-            overrides.append(f"max_steps: {training_args.max_steps} -> {training_args.sweep_lr_steps}")
-            training_args.max_steps = training_args.sweep_lr_steps
-
-        if training_args.do_eval:
-            overrides.append(f"do_eval: True -> False (evaluation disabled during sweep)")
-            training_args.do_eval = False 
-
-        if training_args.do_predict:
-            overrides.append(f"do_predict: True -> False (prediction disabled during sweep)")
-            training_args.do_predict = False
-
-        if training_args.save_strategy != "no":
-            overrides.append(f"save_strategy: {training_args.save_strategy} -> no")
-            training_args.eval_strategy = "no"  # Don't eval during LR sweep
-
-        if training_args.eval_strategy != "no":
-            overrides.append(f"eval_strategy: {training_args.eval_strategy} -> no")
-            training_args.save_strategy = "no"  # Don't save checkpoints during LR sweep
-
-        if training_args.learning_rate:
-            overrides.append(f"learning_rate: will be set by sweep (user value {training_args.learning_rate} ignored)")
-
-        if training_args.warmup_ratio != 0.0:
-            overrides.append(f"warmup_ratio: {training_args.warmup_ratio} -> 0.0")
-            training_args.warmup_ratio = 0.0
-        
-        if training_args.warmup_steps == 0:
-            overrides.append(f"warmup_steps is not set, forcing: {training_args.warmup_steps} -> {SWEEP_LR_WARMUP_STEPS}")
-            training_args.warmup_steps = SWEEP_LR_WARMUP_STEPS
-
-        if training_args.sweep_lr_steps < SWEEP_LR_WARMUP_STEPS:
-            overrides.append(f"sweep_lr_steps: {training_args.sweep_lr_steps} < {SWEEP_LR_WARMUP_STEPS}, adjusting warmup_steps to 0")
-            training_args.warmup_steps = 0
-
-        if training_args.warmup_steps > 0:
-            overrides.append(f"lr_scheduler_type: {training_args.lr_scheduler_type} -> {SchedulerType.CONSTANT_WITH_WARMUP}")
-            training_args.lr_scheduler_type = SchedulerType.CONSTANT_WITH_WARMUP
-        else:
-            overrides.append(f"lr_scheduler_type: {training_args.lr_scheduler_type} -> {SchedulerType.CONSTANT}")
-            training_args.lr_scheduler_type = SchedulerType.CONSTANT
-
-        if overrides:
-            logger.info("The following arguments will be overridden for sweep:")
-            for override in overrides:
-                logger.info(f"  - {override}")
-            logger.info(f"-" * 80)
-
-        results = []
-        
-        for idx, each_lr in enumerate(training_args.sweep_lr, 1):
-            logger.info(f"{'-'*80}")
-            logger.info(f"[{idx}/{len(training_args.sweep_lr)}] Testing LR = {each_lr}")
-            logger.info(f"{'-'*80}")
-            
-            # Create a copy for this specific run from the base
-            lr_training_args = copy.deepcopy(training_args)
-            lr_training_args.sweep_lr = None       # Prevent recursion
-            lr_training_args.learning_rate = each_lr
-            lr_training_args.output_dir = f"{base_output_dir}/lr_{each_lr:.1e}"
-            lr_training_args.run_name = f"{training_args.run_name}_lr_{each_lr:.1e}"
-                       
-            # Run training for this LR
-            clm(model_args, data_args, lr_training_args)
-            
-            # Properly close wandb run before next iteration
-            # otherwise metrics get mixed up
-            try:
-                import wandb
-                wandb.finish()
-            except Exception:
-                pass
-            
-            # Try to read metrics
-            metrics_file = f"{lr_training_args.output_dir}/trainer_state.json"
-            if os.path.exists(metrics_file):
-                with open(metrics_file, 'r') as f:
-                    state = json.load(f)
-                    # Extract final loss from log history
-                    losses = [log.get('loss') for log in state.get('log_history', []) if 'loss' in log]
-                    final_loss = losses[-1] if losses else None
-                    results.append({
-                        'lr': each_lr,
-                        'final_loss': final_loss,
-                        # 'all_losses': losses
-                    })
-            else:
-                results.append({'lr': each_lr, 'final_loss': None, 'error': 'No metrics found'})
+        # Create a copy for this specific run from the base
+        lr_training_args = copy.deepcopy(training_args)
+        lr_training_args.sweep_lr = None       # Prevent recursion
+        lr_training_args.learning_rate = each_lr
+        lr_training_args.output_dir = f"{base_output_dir}/lr_{each_lr:.1e}"
+        lr_training_args.run_name = f"{training_args.run_name}_lr_{each_lr:.1e}"
                     
-        # Print summary
-        logger.info(f"{'-'*80}")
-        logger.info("LR SWEEP RESULTS")
-        logger.info(f"{'-'*80}")
-        logger.info(f"{'Learning Rate':<20} {'Final Loss':<15}")
-        logger.info(f"{'-'*35}")
+        # Run training for this LR
+        clm(model_args, data_args, lr_training_args)
         
-        valid_results = [r for r in results if r.get('final_loss') is not None]
-        for r in results:
-            loss_str = f"{r['final_loss']:.4f}" if r.get('final_loss') else "ERROR"
-            logger.info(f"{r['lr']:<20.2e} {loss_str:<15}")
+        # Properly close wandb run before next iteration
+        # otherwise metrics get mixed up
+        try:
+            import wandb
+            wandb.finish()
+        except Exception:
+            pass
         
-        if valid_results:
-            best_result = min(valid_results, key=lambda x: x['final_loss'])
-            logger.info(f"Best LR: {best_result['lr']:.2e} (loss: {best_result['final_loss']:.4f})")
-            
-            # Save results to file
-            results_file = f"{base_output_dir}/sweep_lr_results.json"
-            with open(results_file, 'w') as f:
-                json.dump(results, f, indent=2)
-            logger.info(f"Results saved to: {results_file}")
+        # Try to read metrics
+        metrics_file = f"{lr_training_args.output_dir}/trainer_state.json"
+        if os.path.exists(metrics_file):
+            with open(metrics_file, 'r') as f:
+                state = json.load(f)
+                # Extract last loss and grad_norm from log history
+                losses = [log.get('loss') for log in state.get('log_history', []) if 'loss' in log]
+                grad_norms = [log.get('grad_norm') for log in state.get('log_history', []) if 'grad_norm' in log]
+                last_loss = losses[-1] if losses else None
+                last_grad_norm = grad_norms[-1] if grad_norms else None
+                results.append({
+                    'lr': each_lr,
+                    'last_loss': last_loss,
+                    'last_grad_norm': last_grad_norm,
+                })
+        else:
+            results.append({'lr': each_lr, 'last_loss': None, 'last_grad_norm': None, 'error': 'No metrics found'})
+                
+    # Print summary
+    valid_results = [r for r in results if r.get('last_loss') is not None]
+    
+    if valid_results:
+        # Create DataFrame and sort by last_loss
+        df = pd.DataFrame(results)
+        df = df.sort_values('last_loss', na_position='last')
         
-        logger.info(f"{'-'*80}\n")
-        return  # Exit after LR sweep
+        # Add scientific notation column at the beginning
+        df.insert(0, 'e', df['lr'].apply(lambda x: f"{x:.1e}" if pd.notna(x) else ""))
+        
+        best_result = min(valid_results, key=lambda x: x['last_loss'])
+        
+        # Build complete summary with banner
+        summary = f"\n{'-'*80}\n"
+        summary += "LR SWEEP RESULTS\n"
+        summary += f"{'-'*80}\n\n"
+        summary += f"{df.to_string(index=False)}\n\n"
+        summary += f"Best LR: {best_result['lr']:.2e} (loss: {best_result['last_loss']:.6f})\n\n"
+        summary += f"Sweep Configuration:\n"
+        summary += f"  LR Scheduler: {training_args.lr_scheduler_type}\n"
+        summary += f"  Max Steps: {training_args.max_steps}\n"
+        if training_args.warmup_steps > 0:
+            summary += f"  Warmup Steps: {training_args.warmup_steps}\n"
+        
+        logger.info(summary)
+        
+        # Save results to file
+        results_file = f"{base_output_dir}/sweep_lr_results.txt"
+        with open(results_file, 'w') as f:
+            f.write(summary)
+        
+        logger.info(f"Results saved to: {results_file}")
+    
+    logger.info(f"{'-'*80}\n")
+    return  # Exit after LR sweep
 
 
 def clm(model_args=None, data_args=None, training_args=None):
@@ -631,7 +647,8 @@ def clm(model_args=None, data_args=None, training_args=None):
         elif last_checkpoint is not None:
             checkpoint = last_checkpoint
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
-        trainer.save_model()  # Saves the tokenizer too for easy upload
+        if training_args.save_strategy != "no":
+            trainer.save_model()  # Saves the tokenizer too for easy upload
 
         metrics = train_result.metrics
 
