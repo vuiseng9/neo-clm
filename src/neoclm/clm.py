@@ -123,8 +123,8 @@ def clm_sweep_lr(model_args, data_args, training_args, trainer_cls=Trainer):
         lr_training_args = copy.deepcopy(training_args)
         lr_training_args.sweep_lr = None       # Prevent recursion
         lr_training_args.learning_rate = each_lr
-        lr_training_args.output_dir = f"{base_output_dir}/lr_{each_lr:.1e}"
-        lr_training_args.run_name = f"{training_args.run_name}_lr_{each_lr:.1e}"
+        lr_training_args.output_dir = f"{base_output_dir}/sweeplr_{each_lr:.1e}"
+        lr_training_args.run_name = f"{training_args.run_name}_sweeplr_{each_lr:.1e}"
                     
         # Run training for this LR
         clm(model_args, data_args, lr_training_args, trainer_cls)
