@@ -183,7 +183,7 @@ def clm_sweep_lr(model_args, data_args, training_args, trainer_cls=Trainer):
         logger.info(summary)
         
         # Save results to file
-        results_file = f"{base_output_dir}/sweep_lr_results.txt"
+        results_file = f"{base_output_dir}/results_sweep_lr.txt"
         with open(results_file, 'w') as f:
             f.write(summary)
         
