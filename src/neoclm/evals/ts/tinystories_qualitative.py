@@ -17,11 +17,12 @@ def main(
     model_id_or_path: str = typer.Argument(..., help="Path to checkpoint directory or HuggingFace model ID"),
     max_new_tokens: int = typer.Option(64, "-m", help="Maximum new tokens to generate"),
     prompt_ids: str = typer.Option("0,4,8", "-p", help="Comma-separated indices (e.g., '0,4,8') or 'all' to use first n samples"),
+    trust_remote_code: bool = typer.Option(False, "-R", help="Whether to trust remote code when loading model")
 ):
 
     # Load HuggingFace model
-    model = AutoModelForCausalLM.from_pretrained(model_id_or_path, device_map="auto")
-    tokzr = AutoTokenizer.from_pretrained(model_id_or_path)
+    model = AutoModelForCausalLM.from_pretrained(model_id_or_path, device_map="auto", trust_remote_code=trust_remote_code)
+    tokzr = AutoTokenizer.from_pretrained(model_id_or_path, trust_remote_code=trust_remote_code)
     tokzr.padding_side = "left" # causal lm padding side
 
     # Load test prompts
