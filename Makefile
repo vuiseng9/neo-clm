@@ -14,8 +14,11 @@ endif
 install-dev:
 	pip install -e .
 
+old-eval-tinystories:
+	CUDA_VISIBLE_DEVICES=$(CUDADEV) python src/neoclm/evals/ts/tinystories_qualitative.py $(ckpt)
+
 eval-tinystories:
-	CUDA_VISIBLE_DEVICES=$(CUDADEV) python kit/evals/ts/tinystories_qualitative.py $(ckpt)
+	CUDA_VISIBLE_DEVICES=$(CUDADEV) neoclm-eval-ts $(ckpt)
 
 gpt2-ts-sweep-lr: check-postfix
 	mkdir -p $(OUTROOT)/$(WANDB_PROJECT)/$@-$(postfix) && \
