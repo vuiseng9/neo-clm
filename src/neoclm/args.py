@@ -237,6 +237,17 @@ class OpinionatedTrainArgs(TrainingArguments):
         },
     )
 
+    include_num_input_tokens_seen: Union[str, bool] = field(
+        default=True,
+        metadata={
+            "help": (
+                "Whether to track the number of input tokens seen. "
+                "Can be `'all'` to count all tokens, `'non_padding'` to count only non-padding tokens, "
+                "or a boolean (`True` maps to `'all'`, `False` to `'no'`)."
+            )
+        },
+    )
+
     save_total_limit: Optional[int] = field(
         default=2,
         metadata={
