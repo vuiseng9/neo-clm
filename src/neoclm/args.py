@@ -249,7 +249,7 @@ class OpinionatedTrainArgs(TrainingArguments):
     )
 
     save_total_limit: Optional[int] = field(
-        default=2,
+        default=1,
         metadata={
             "help": (
                 "If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in"
